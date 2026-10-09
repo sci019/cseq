@@ -2,6 +2,9 @@ name: Publish cseq to PyPI
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'release/trigger-pypi'
 
 permissions:
   contents: read
