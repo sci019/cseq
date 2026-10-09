@@ -1,1 +1,1 @@
-trigger TestPyPI trusted publishing verification v2
+trigger TestPyPI cseq 0.0.2 after Python compatibility validation
