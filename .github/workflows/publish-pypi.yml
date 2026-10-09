@@ -1,0 +1,45 @@
+name: Publish cseq to PyPI
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-pypi:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore validated source archive
+        shell: bash
+        run: |
+          cat release/cseq_poc.zip.b64.part-* | base64 --decode > cseq_poc.zip
+          echo "ee1c0782459bed9cc172ffa3f5ddf03bb6dc1594ee105c527e705b9da21e7c76  cseq_poc.zip" | sha256sum -c -
+          mkdir source
+          unzip -q cseq_poc.zip -d source
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build distributions
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip build
+          cd source
+          python -m build
+          python -m pip install "dist/cseq-0.0.1-py3-none-any.whl[parser-tree-sitter]"
+          cseq --version
+          cseq docs all --output-dir ../docs-smoke
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: source/dist/
