@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           cat release/cseq_poc.zip.b64.part-* | base64 --decode > cseq_poc.zip
-          echo "ee1c0782459bed9cc172ffa3f5ddf03bb6dc1594ee105c527e705b9da21e7c76  cseq_poc.zip" | sha256sum -c -
+          echo "4a998011933c8cbe4012e00caa1552c1e964cc6c93185a4711e4afaa3963cf29  cseq_poc.zip" | sha256sum -c -
           mkdir source
           unzip -q cseq_poc.zip -d source
 
