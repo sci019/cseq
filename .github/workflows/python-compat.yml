@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   supported-python:
     name: Windows / Python ${{ matrix.python-version }}
@@ -37,9 +41,34 @@ jobs:
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
+        if: matrix.python-version != '3.15'
         with:
           python-version: ${{ matrix.python-version }}
           check-latest: true
+
+      - name: Install Python 3.15.0 from python.org while setup-python manifest catches up
+        if: matrix.python-version == '3.15'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "python-3.15.0-amd64.exe"
+          $target = Join-Path $env:RUNNER_TEMP "python315"
+          Invoke-WebRequest "https://www.python.org/ftp/python/3.15.0/python-3.15.0-amd64.exe" -OutFile $installer
+          $args = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=$target",
+            "Include_pip=1",
+            "Include_launcher=0",
+            "Include_test=0",
+            "PrependPath=0",
+            "Shortcuts=0"
+          )
+          $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+          if ($proc.ExitCode -ne 0) {
+            throw "Python 3.15 installer failed with exit code $($proc.ExitCode)"
+          }
+          $target | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $target "Scripts") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Ensure LLVM/Clang
         shell: pwsh
@@ -53,6 +82,7 @@ jobs:
         shell: pwsh
         working-directory: source
         run: |
+          python --version
           python -m pip install --upgrade pip
           python -m pip install pytest
           python -m pip install ".[parser-tree-sitter]"
@@ -62,7 +92,7 @@ jobs:
           cseq docs all --output-dir ../docs-smoke
 
   latest-stable-python:
-    name: Windows / latest stable Python
+    name: Windows / latest stable Python from setup-python
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
