@@ -1,0 +1,68 @@
+name: Python 3.8 legacy parser API probe
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python38-parser-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: ts ${{ matrix.ts }} / c ${{ matrix.c }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ts: "0.21.3"
+            c: "0.21.4"
+          - ts: "0.21.0"
+            c: "0.21.0"
+
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.8"
+          check-latest: true
+
+      - name: Probe legacy parser contract
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          python -m pip install --only-binary=:all: "tree-sitter==${{ matrix.ts }}" "tree-sitter-c==${{ matrix.c }}"
+          @'
+          import tree_sitter, tree_sitter_c
+          from importlib import metadata
+
+          raw = tree_sitter_c.language()
+          print("runtime", metadata.version("tree-sitter"))
+          print("grammar", metadata.version("tree-sitter-c"))
+          print("raw_type", type(raw).__name__)
+
+          language = tree_sitter.Language(raw, "c")
+          print("language_version", getattr(language, "version", None))
+          print("language_abi_version", getattr(language, "abi_version", None))
+
+          parser = tree_sitter.Parser()
+          if hasattr(parser, "set_language"):
+              parser.set_language(language)
+              print("SET_LANGUAGE_OK")
+          else:
+              parser.language = language
+              print("PROPERTY_LANGUAGE_OK")
+
+          src=b"int helper(void){return 1;} int main(void){return helper();}"
+          tree=parser.parse(src)
+          print("root", tree.root_node.type, tree.root_node.has_error)
+
+          q=language.query("(function_definition) @fn")
+          print("captures", q.captures(tree.root_node))
+          if hasattr(q, "matches"):
+              print("matches", q.matches(tree.root_node))
+          print("LEGACY_PARSER_PROBE_OK")
+          '@ | python -
