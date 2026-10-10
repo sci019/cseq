@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - python-compat-0.0.4
+      - python-compat-0.0.3
     paths:
       - 'release/trigger-testpypi-0.0.4'
 
@@ -29,7 +29,7 @@ jobs:
           mkdir source
           unzip -q cseq_poc.zip -d source
           cp -a release/overlay-0.0.2/. source/
-          cp -a release/overlay-0.0.4/. source/
+          cp -a release/overlay-0.0.3/. source/
           cp -a release/overlay-0.0.4/. source/
 
       - name: Set up Python
