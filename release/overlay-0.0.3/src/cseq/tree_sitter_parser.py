@@ -43,16 +43,19 @@ class TreeSitterCParser(ParserBackend):
 
     def __init__(self) -> None:
         try:
-            from tree_sitter import Language, Parser, Query
-            try:
-                from tree_sitter import QueryCursor
-            except ImportError:
-                QueryCursor = None
+            import tree_sitter
+            from tree_sitter import Language, Parser
+            Query = getattr(tree_sitter, "Query", None)
+            QueryCursor = getattr(tree_sitter, "QueryCursor", None)
             import tree_sitter_c
         except Exception as exc:  # pragma: no cover - exercised on wheel env
             raise RuntimeError("locked tree-sitter runtime is not available") from exc
 
-        language = Language(tree_sitter_c.language())
+        raw_language = tree_sitter_c.language()
+        try:
+            language = Language(raw_language)
+        except TypeError:
+            language = Language(raw_language, "c")
         lock = load_parser_dependency_lock()
         expected_abi = int(expected_parser_profile(lock)["grammar_abi"])
         observed_abi = int(getattr(language, "abi_version", getattr(language, "version", -1)))
@@ -61,18 +64,34 @@ class TreeSitterCParser(ParserBackend):
                 f"tree-sitter-c ABI mismatch: observed={observed_abi} expected={expected_abi}"
             )
         self.language = language
-        self.parser = Parser(language)
+        try:
+            parser = Parser()
+            if hasattr(parser, "set_language"):
+                parser.set_language(language)
+            else:
+                parser.language = language
+        except Exception:
+            parser = Parser(language)
+        self.parser = parser
         self._QueryCursor = QueryCursor
-        self._function_query = Query(language, "(function_definition declarator: (function_declarator declarator: (identifier) @name) @decl) @fn")
-        self._syntax_evidence_query = Query(
-            language,
+
+        def make_query(source: str):
+            if Query is not None:
+                try:
+                    return Query(language, source)
+                except (TypeError, AttributeError):
+                    pass
+            return language.query(source)
+
+        self._function_query = make_query("(function_definition declarator: (function_declarator declarator: (identifier) @name) @decl) @fn")
+        self._syntax_evidence_query = make_query(
             "[(function_definition) (call_expression) (return_statement) "
             "(break_statement) (if_statement) (while_statement) (for_statement) "
-            "(field_expression) (struct_specifier) (type_definition) (preproc_ifdef)] @node",
+            "(field_expression) (struct_specifier) (type_definition) (preproc_ifdef)] @node"
         )
-        self._all_call_query = Query(language, "(call_expression) @call")
-        self._direct_call_query = Query(language, "(call_expression function: (identifier)) @call")
-        self._call_detail_query = Query(language, "(call_expression function: (_) @target) @call")
+        self._all_call_query = make_query("(call_expression) @call")
+        self._direct_call_query = make_query("(call_expression function: (identifier)) @call")
+        self._call_detail_query = make_query("(call_expression function: (_) @target) @call")
 
     def _query_captures(self, query, root) -> dict[str, list]:
         if self._QueryCursor is not None:
@@ -88,8 +107,19 @@ class TreeSitterCParser(ParserBackend):
 
     def _query_matches(self, query, root):
         if self._QueryCursor is not None:
-            return self._QueryCursor(query).matches(root)
-        return query.matches(root)
+            raw = self._QueryCursor(query).matches(root)
+        else:
+            raw = query.matches(root)
+        normalized = []
+        for pattern_index, captures in raw:
+            fixed = {}
+            for name, nodes in captures.items():
+                if isinstance(nodes, (list, tuple)):
+                    fixed[str(name)] = list(nodes)
+                else:
+                    fixed[str(name)] = [nodes]
+            normalized.append((pattern_index, fixed))
+        return normalized
 
     def prepare(self, translation_unit: TranslationUnit) -> TreeSitterPrepared:
         if translation_unit.source_text is not None:
