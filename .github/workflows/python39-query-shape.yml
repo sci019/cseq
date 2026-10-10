@@ -1,0 +1,45 @@
+name: Python 3.9 query API shape
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python39-query-shape.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+          check-latest: true
+      - shell: pwsh
+        run: |
+          python -m pip install --only-binary=:all: "tree-sitter==0.23.2" "tree-sitter-c==0.21.4"
+          @'
+          import tree_sitter, tree_sitter_c
+          language = tree_sitter.Language(tree_sitter_c.language())
+          parser = tree_sitter.Parser(language)
+          tree = parser.parse(b"int helper(void){return 1;} int main(void){return helper();}")
+          q = tree_sitter.Query(language, "(function_definition declarator: (function_declarator declarator: (identifier) @name) @decl) @fn")
+          print("query_has_captures", hasattr(q, "captures"))
+          print("query_has_matches", hasattr(q, "matches"))
+          if hasattr(q, "captures"):
+              x=q.captures(tree.root_node)
+              print("captures_type", type(x).__name__)
+              print("captures_repr", repr(x))
+          if hasattr(q, "matches"):
+              y=q.matches(tree.root_node)
+              print("matches_type", type(y).__name__)
+              print("matches_repr", repr(y))
+          q2=tree_sitter.Query(language, "(call_expression function: (_) @target) @call")
+          if hasattr(q2, "matches"):
+              print("call_matches_repr", repr(q2.matches(tree.root_node)))
+          print("SHAPE_PROBE_OK")
+          '@ | python -
