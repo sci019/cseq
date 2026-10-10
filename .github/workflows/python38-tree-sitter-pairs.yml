@@ -1,0 +1,79 @@
+name: Python 3.8 Tree-sitter pair probe
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python38-tree-sitter-pairs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: ts ${{ matrix.ts }} / c ${{ matrix.c }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ts: "0.23.2"
+            c: "0.21.4"
+          - ts: "0.22.3"
+            c: "0.21.4"
+          - ts: "0.22.0"
+            c: "0.21.4"
+          - ts: "0.21.3"
+            c: "0.21.4"
+
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.8"
+          check-latest: true
+
+      - name: Install candidate pair
+        shell: pwsh
+        run: |
+          python --version
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: "tree-sitter==${{ matrix.ts }}" "tree-sitter-c==${{ matrix.c }}"
+          python -m pip show tree-sitter tree-sitter-c
+
+      - name: API and ABI probe
+        shell: pwsh
+        run: |
+          @'
+          import tree_sitter
+          import tree_sitter_c
+          from importlib import metadata
+
+          print("tree-sitter", metadata.version("tree-sitter"))
+          print("tree-sitter-c", metadata.version("tree-sitter-c"))
+          language = tree_sitter.Language(tree_sitter_c.language())
+          abi = getattr(language, "abi_version", getattr(language, "version", None))
+          print("abi_version", abi)
+          try:
+              parser = tree_sitter.Parser(language)
+          except TypeError:
+              parser = tree_sitter.Parser()
+              parser.set_language(language)
+          tree = parser.parse(b"int helper(void){return 1;} int main(void){return helper();}")
+          print("root", tree.root_node.type)
+          print("has_Query", hasattr(tree_sitter, "Query"))
+          print("has_QueryCursor", hasattr(tree_sitter, "QueryCursor"))
+          if hasattr(tree_sitter, "Query"):
+              query = tree_sitter.Query(language, "(function_definition) @fn")
+          else:
+              query = language.query("(function_definition) @fn")
+          if hasattr(tree_sitter, "QueryCursor"):
+              cursor = tree_sitter.QueryCursor(query)
+              captures = cursor.captures(tree.root_node)
+          else:
+              captures = query.captures(tree.root_node)
+          print("captures_type", type(captures).__name__)
+          print("captures", captures)
+          print("PAIR_PROBE_OK")
+          '@ | python -
