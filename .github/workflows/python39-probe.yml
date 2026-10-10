@@ -1,0 +1,87 @@
+name: Python 3.9 compatibility probe
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python39-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  python39-probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore cseq 0.0.2 validated source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
+          [IO.File]::WriteAllBytes("cseq_poc.zip", [Convert]::FromBase64String($b64))
+          $actual = (Get-FileHash cseq_poc.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne "4a998011933c8cbe4012e00caa1552c1e964cc6c93185a4711e4afaa3963cf29") {
+            throw "validated source archive checksum mismatch: $actual"
+          }
+          Expand-Archive cseq_poc.zip -DestinationPath source
+          Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+          check-latest: true
+
+      - name: Compile cseq sources under Python 3.9
+        shell: pwsh
+        run: |
+          python --version
+          python -m compileall -q source/src/cseq
+
+      - name: Install legacy Tree-sitter candidate wheels
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: "tree-sitter==0.23.2" "tree-sitter-c==0.23.6"
+          python -m pip show tree-sitter tree-sitter-c
+
+      - name: Probe current cseq Tree-sitter API contract
+        shell: pwsh
+        run: |
+          @'
+          import tree_sitter
+          import tree_sitter_c
+          from importlib import metadata
+
+          print("tree-sitter", metadata.version("tree-sitter"))
+          print("tree-sitter-c", metadata.version("tree-sitter-c"))
+          language = tree_sitter.Language(tree_sitter_c.language())
+          print("language", language)
+          print("abi_version", getattr(language, "abi_version", None))
+          parser = tree_sitter.Parser(language)
+          tree = parser.parse(b"int main(void){return 0;}")
+          print("root", tree.root_node.type)
+          print("has Query", hasattr(tree_sitter, "Query"))
+          print("has QueryCursor", hasattr(tree_sitter, "QueryCursor"))
+          query = tree_sitter.Query(language, "(function_definition) @fn")
+          cursor = tree_sitter.QueryCursor(query)
+          captures = cursor.captures(tree.root_node)
+          print("captures_type", type(captures).__name__)
+          print("API_PROBE_OK")
+          '@ | python -
+
+      - name: Probe cseq imports after minimal Python 3.9 compatibility patch
+        shell: pwsh
+        working-directory: source
+        run: |
+          python -m pip install tomli
+          (Get-Content src/cseq/config.py -Raw).Replace('@dataclass(frozen=True, slots=True)', '@dataclass(frozen=True)').Replace('@dataclass(slots=True)', '@dataclass') | Set-Content src/cseq/config.py -Encoding utf8
+          $env:PYTHONPATH = (Resolve-Path src).Path
+          python -c "import cseq; import cseq.config; import cseq.tree_sitter_parser; print('CSEQ_IMPORT_OK', cseq.__version__)"
