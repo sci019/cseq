@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cseq"
+version = "0.0.3"
+description = "C source sequence analysis tool PoC"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["tomli>=2.0.1; python_version < '3.11'"]
+
+[project.optional-dependencies]
+parser-tree-sitter = [
+  "tree-sitter==0.23.2; python_version < '3.10'",
+  "tree-sitter-c==0.21.4; python_version < '3.10'",
+  "tree-sitter==0.26.0; python_version >= '3.10'",
+  "tree-sitter-c==0.24.2; python_version >= '3.10'",
+]
+
+[project.scripts]
+cseq = "cseq.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+cseq = ["parser_dependency_lock.json", "parser_contract_cases.json", "resources/*.md", "resources/*.html"]
