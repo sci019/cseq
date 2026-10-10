@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "decision_id": "ADR-001",
+  "canonical_frontend": "tree-sitter-c",
+  "packages": {
+    "tree-sitter": {
+      "version": "0.26.0",
+      "python_requires": ">=3.10",
+      "artifacts": {
+        "cp313-linux-x86_64-glibc": {
+          "filename": "tree_sitter-0.26.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "7075ef857ef86f327dbb72d1e2574dda78db5754b3a1fca6506acd7fe5d561a7"
+        },
+        "cp313-windows-x86_64": {
+          "filename": "tree_sitter-0.26.0-cp313-cp313-win_amd64.whl",
+          "sha256": "93e220cab7e6a823efeb2046c49171427de92ef71c7c681c01820d14d8d3721f"
+        },
+        "cp311-linux-x86_64-glibc": {
+          "filename": "tree_sitter-0.26.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "335294ce0504fcefde5245dff596778ffaf820205b98ae0b549c72e48855f1d8"
+        },
+        "cp311-windows-x86_64": {
+          "filename": "tree_sitter-0.26.0-cp311-cp311-win_amd64.whl",
+          "sha256": "0f8793fd18ad7eec276ed4b51c097b4bf2002b357259b66b0d75db1f3f41c754"
+        },
+        "cp312-linux-x86_64-glibc": {
+          "filename": "tree_sitter-0.26.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+          "sha256": "5a6b333b0282d8bb0af741f9b018bd2523d4eecb2686bf6717066a625fecfaa4"
+        },
+        "cp312-windows-x86_64": {
+          "filename": "tree_sitter-0.26.0-cp312-cp312-win_amd64.whl",
+          "sha256": "ca89e361a276dbc934b28a43dd881199e25d34ff5493ee0ce45f3c52a6124a37"
+        }
+      }
+    },
+    "tree-sitter-c": {
+      "version": "0.24.2",
+      "python_requires": ">=3.10",
+      "grammar_abi": 15,
+      "artifacts": {
+        "abi3-linux-x86_64-glibc": {
+          "filename": "tree_sitter_c-0.24.2-cp310-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+          "sha256": "5041ef67eb68ce6bc8bb0b1f8ef3a5585ce523dae0c7eec109ab0627dd75aede"
+        },
+        "abi3-windows-x86_64": {
+          "filename": "tree_sitter_c-0.24.2-cp310-abi3-win_amd64.whl",
+          "sha256": "abb549225091f7b25df2dd3a0143ece6e208f7055d8bcb4700b41ee79b9ef1e1"
+        }
+      }
+    }
+  },
+  "expected_api": {
+    "language_factory": "tree_sitter.Language(tree_sitter_c.language())",
+    "parser_factory": "tree_sitter.Parser(language)",
+    "parse_call": "parser.parse(source_bytes)",
+    "smoke_source": "int main(void) { return 0; }",
+    "smoke_root_type": "translation_unit"
+  },
+  "compatibility_profiles": {
+    "py39": {
+      "python_spec": ">=3.9,<3.10",
+      "tree-sitter": "0.23.2",
+      "tree-sitter-c": "0.21.4",
+      "grammar_abi": 14,
+      "artifact_policy": "runtime-capability-validated; wheel hashes pending preservation"
+    }
+  }
+}
