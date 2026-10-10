@@ -1,0 +1,90 @@
+name: Validate cseq 0.0.3 on Python 3.8
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python38-full.yml'
+      - 'release/overlay-0.0.3/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  python38-full:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore validated source with compatibility overlays
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
+          [IO.File]::WriteAllBytes("cseq_poc.zip", [Convert]::FromBase64String($b64))
+          $actual = (Get-FileHash cseq_poc.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne "4a998011933c8cbe4012e00caa1552c1e964cc6c93185a4711e4afaa3963cf29") {
+            throw "validated source archive checksum mismatch: $actual"
+          }
+          Expand-Archive cseq_poc.zip -DestinationPath source
+          Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
+          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.8"
+          check-latest: true
+
+      - name: Ensure LLVM/Clang
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+            choco install llvm --no-progress -y
+          }
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cseq 0.0.3 and test dependencies
+        working-directory: source
+        shell: pwsh
+        run: |
+          python --version
+          python -m pip install --upgrade "pip<25.1"
+          python -m pip install ".[parser-tree-sitter]"
+          python -m pip install "pytest<9"
+          cseq --version
+          cseq doctor
+          python -m pip show tree-sitter tree-sitter-c
+
+      - name: Full test suite
+        working-directory: source
+        shell: pwsh
+        run: python -m pytest -q
+
+      - name: Analyze real C sample
+        working-directory: source
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force sample | Out-Null
+          @'
+          void foo(void) {}
+          int main(void) {
+              foo();
+              return 0;
+          }
+          '@ | Set-Content -Encoding utf8 sample/main.c
+          cseq analyze sample --entry main
+
+      - name: Export bundled docs
+        working-directory: source
+        shell: pwsh
+        run: |
+          cseq docs all --output-dir docs-smoke
+          if (-not (Test-Path docs-smoke/README.md)) { throw "README export missing" }
+          if (-not (Test-Path docs-smoke/シーケンス解析_設計書.md)) { throw "design export missing" }
+          if (-not (Test-Path docs-smoke/実装・検証成績書.html)) { throw "report export missing" }
