@@ -2,11 +2,6 @@ name: Publish cseq to PyPI
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - python-compat-0.0.3
-    paths:
-      - 'release/trigger-pypi-0.0.4'
 
 permissions:
   contents: read
