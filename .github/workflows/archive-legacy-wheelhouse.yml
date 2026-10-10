@@ -1,0 +1,140 @@
+name: Preserve cseq 0.0.4 legacy Windows wheelhouses
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - ".github/workflows/archive-legacy-wheelhouse.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cseq-legacy-wheelhouse-0.0.4-win64
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    name: Offline-verify and retain Python 3.8 / 3.9 wheels
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.8"
+
+      - name: Download and offline-verify Python 3.8 wheelhouse
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $lane = "py38"
+          $wheelhouse = Join-Path $PWD "wheelhouse/$lane"
+          New-Item -ItemType Directory -Path $wheelhouse -Force | Out-Null
+          python --version
+          python -m pip download --only-binary=:all: --dest $wheelhouse "cseq[parser-tree-sitter]==0.0.4"
+          if ($LASTEXITCODE -ne 0) { throw "3.8 wheel download failed" }
+          $venv = Join-Path $PWD "offline-verify-$lane"
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw "3.8 venv failed" }
+          $venvPython = Join-Path $venv "Scripts/python.exe"
+          & $venvPython -m pip install --no-index --find-links $wheelhouse "cseq[parser-tree-sitter]==0.0.4"
+          if ($LASTEXITCODE -ne 0) { throw "3.8 offline install failed" }
+          & $venvPython -m pip check
+          if ($LASTEXITCODE -ne 0) { throw "3.8 pip check failed" }
+          & $venvPython -c "from importlib import metadata as m; assert m.version('cseq') == '0.0.4'; assert m.version('tree-sitter') == '0.21.3'; assert m.version('tree-sitter-c') == '0.21.4'"
+          if ($LASTEXITCODE -ne 0) { throw "3.8 pinned dependency mismatch" }
+          $cli = Join-Path $venv "Scripts/cseq.exe"
+          & $cli doctor | Set-Content -Path "doctor-$lane.json" -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "3.8 doctor failed" }
+          $doctor = Get-Content "doctor-$lane.json" -Raw | ConvertFrom-Json
+          if (-not $doctor.parser_environment.canonical_fast_frontend_ready) {
+            throw "3.8 canonical frontend not ready"
+          }
+          New-Item -ItemType Directory -Path "sample-$lane" -Force | Out-Null
+          ("void foo(void) {}" + [Environment]::NewLine + "int main(void) { foo(); return 0; }") | Set-Content -Path "sample-$lane/main.c" -Encoding utf8
+          & $cli analyze "sample-$lane" --entry main | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "3.8 C source analysis failed" }
+          $wheels = @(Get-ChildItem $wheelhouse -File -Filter "*.whl" | Sort-Object Name)
+          if ($wheels.Count -lt 3) { throw "3.8 wheel set unexpectedly incomplete" }
+          $checks = @($wheels | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          })
+          $checks | Set-Content -Path (Join-Path $wheelhouse "SHA256SUMS.txt") -Encoding ascii
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+
+      - name: Download and offline-verify Python 3.9 wheelhouse
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $lane = "py39"
+          $wheelhouse = Join-Path $PWD "wheelhouse/$lane"
+          New-Item -ItemType Directory -Path $wheelhouse -Force | Out-Null
+          python --version
+          python -m pip download --only-binary=:all: --dest $wheelhouse "cseq[parser-tree-sitter]==0.0.4"
+          if ($LASTEXITCODE -ne 0) { throw "3.9 wheel download failed" }
+          $venv = Join-Path $PWD "offline-verify-$lane"
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw "3.9 venv failed" }
+          $venvPython = Join-Path $venv "Scripts/python.exe"
+          & $venvPython -m pip install --no-index --find-links $wheelhouse "cseq[parser-tree-sitter]==0.0.4"
+          if ($LASTEXITCODE -ne 0) { throw "3.9 offline install failed" }
+          & $venvPython -m pip check
+          if ($LASTEXITCODE -ne 0) { throw "3.9 pip check failed" }
+          & $venvPython -c "from importlib import metadata as m; assert m.version('cseq') == '0.0.4'; assert m.version('tree-sitter') == '0.23.2'; assert m.version('tree-sitter-c') == '0.21.4'"
+          if ($LASTEXITCODE -ne 0) { throw "3.9 pinned dependency mismatch" }
+          $cli = Join-Path $venv "Scripts/cseq.exe"
+          & $cli doctor | Set-Content -Path "doctor-$lane.json" -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "3.9 doctor failed" }
+          $doctor = Get-Content "doctor-$lane.json" -Raw | ConvertFrom-Json
+          if (-not $doctor.parser_environment.canonical_fast_frontend_ready) {
+            throw "3.9 canonical frontend not ready"
+          }
+          New-Item -ItemType Directory -Path "sample-$lane" -Force | Out-Null
+          ("void foo(void) {}" + [Environment]::NewLine + "int main(void) { foo(); return 0; }") | Set-Content -Path "sample-$lane/main.c" -Encoding utf8
+          & $cli analyze "sample-$lane" --entry main | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "3.9 C source analysis failed" }
+          $wheels = @(Get-ChildItem $wheelhouse -File -Filter "*.whl" | Sort-Object Name)
+          if ($wheels.Count -lt 3) { throw "3.9 wheel set unexpectedly incomplete" }
+          $checks = @($wheels | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          })
+          $checks | Set-Content -Path (Join-Path $wheelhouse "SHA256SUMS.txt") -Encoding ascii
+
+      - name: Package SHA-256 checked wheelhouses
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path archives | Out-Null
+          foreach ($lane in @("py38", "py39")) {
+            $archive = "archives/cseq-0.0.4-win_amd64-$lane-wheelhouse.zip"
+            Compress-Archive -Path "wheelhouse/$lane/*" -DestinationPath $archive
+            if (-not (Test-Path $archive)) { throw "Missing $archive" }
+          }
+          @(Get-ChildItem archives -Filter "*.zip" | Sort-Object Name) | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $($_.Name)"
+          } | Set-Content -Path archives/SHA256SUMS.txt -Encoding ascii
+
+      - name: Publish immutable wheelhouse archive
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "cseq-0.0.4-legacy-wheels-win64-v1"
+          $existing = & gh release view $tag --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) { throw "Existing archive must not be silently overwritten" }
+          $assets = @(
+            "archives/cseq-0.0.4-win_amd64-py38-wheelhouse.zip",
+            "archives/cseq-0.0.4-win_amd64-py39-wheelhouse.zip",
+            "archives/SHA256SUMS.txt"
+          )
+          & gh release create $tag @assets --target $env:GITHUB_SHA --title "cseq 0.0.4 legacy Windows wheel snapshots" --notes "Offline-verified wheel archives for Python 3.8 and 3.9 on Windows x86-64. Each ZIP includes SHA256SUMS.txt. Normal PyPI pip install is unaffected. Upstream wheel licenses remain embedded in their wheel files."
+          if ($LASTEXITCODE -ne 0) { throw "Release creation failed" }
