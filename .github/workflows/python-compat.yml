@@ -44,6 +44,7 @@ jobs:
           Expand-Archive cseq_poc.zip -DestinationPath source
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
           Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
+          Copy-Item release/overlay-0.0.4/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
         if: matrix.python-version != '3.15'
@@ -120,6 +121,7 @@ jobs:
           Expand-Archive cseq_poc.zip -DestinationPath source
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
           Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
+          Copy-Item release/overlay-0.0.4/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
         with:
