@@ -1,0 +1,94 @@
+name: Verify cseq 0.0.2 from PyPI
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.2
+    paths:
+      - '.github/workflows/verify-pypi-0.0.2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  verify-pypi:
+    name: PyPI wheel / Windows / Python ${{ matrix.python-version }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14", "3.15"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        if: matrix.python-version != '3.15'
+        with:
+          python-version: ${{ matrix.python-version }}
+          check-latest: true
+
+      - name: Install Python 3.15.0 from python.org while setup-python manifest catches up
+        if: matrix.python-version == '3.15'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "python-3.15.0-amd64.exe"
+          $target = Join-Path $env:RUNNER_TEMP "python315"
+          Invoke-WebRequest "https://www.python.org/ftp/python/3.15.0/python-3.15.0-amd64.exe" -OutFile $installer
+          $args = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=$target",
+            "Include_pip=1",
+            "Include_launcher=0",
+            "Include_test=0",
+            "PrependPath=0",
+            "Shortcuts=0"
+          )
+          $proc = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Python 3.15 installer failed: $($proc.ExitCode)" }
+          $target | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          (Join-Path $target "Scripts") | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Ensure LLVM/Clang
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+            choco install llvm --no-progress -y
+          }
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cseq 0.0.2 from production PyPI
+        shell: pwsh
+        run: |
+          python --version
+          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir "cseq[parser-tree-sitter]==0.0.2"
+          cseq --version
+          cseq doctor
+
+      - name: Analyze a real C sample
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force sample | Out-Null
+          @'
+          void foo(void) {}
+          int main(void) {
+              foo();
+              return 0;
+          }
+          '@ | Set-Content -Encoding utf8 sample/main.c
+          cseq analyze sample --entry main
+
+      - name: Export bundled docs
+        shell: pwsh
+        run: |
+          cseq docs all --output-dir docs-smoke
+          if (-not (Test-Path docs-smoke/README.md)) { throw "README export missing" }
+          if (-not (Test-Path docs-smoke/シーケンス解析_設計書.md)) { throw "design export missing" }
+          if (-not (Test-Path docs-smoke/実装・検証成績書.html)) { throw "report export missing" }
