@@ -42,9 +42,12 @@ jobs:
             throw "validated source archive checksum mismatch: $actual"
           }
           Expand-Archive cseq_poc.zip -DestinationPath source
-          Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
-          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
-          Copy-Item release/overlay-0.0.4/* source/ -Recurse -Force
+          $overlays = @(Get-ChildItem release -Directory | Where-Object { $_.Name -match '^overlay-[0-9]+\.[0-9]+\.[0-9]+$' } | Sort-Object { [version]($_.Name.Substring(8)) })
+          if ($overlays.Count -eq 0) { throw "No versioned cseq release overlays found" }
+          foreach ($overlay in $overlays) {
+            Write-Output ("Applying compatibility source overlay: " + $overlay.Name)
+            Copy-Item -Path (Join-Path $overlay.FullName '*') -Destination source -Recurse -Force
+          }
 
       - uses: actions/setup-python@v7
         if: matrix.python-version != '3.15'
@@ -89,6 +92,8 @@ jobs:
         working-directory: source
         run: |
           python --version
+          python ../release/verify_python_compatibility.py .
+          if ($LASTEXITCODE -ne 0) { throw "Python compatibility policy guard failed" }
           $minor = [int](python -c "import sys; print(sys.version_info.minor)")
           if ($minor -lt 9) {
             python -m pip install --upgrade "pip<25.1"
@@ -119,9 +124,12 @@ jobs:
             throw "validated source archive checksum mismatch: $actual"
           }
           Expand-Archive cseq_poc.zip -DestinationPath source
-          Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
-          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
-          Copy-Item release/overlay-0.0.4/* source/ -Recurse -Force
+          $overlays = @(Get-ChildItem release -Directory | Where-Object { $_.Name -match '^overlay-[0-9]+\.[0-9]+\.[0-9]+$' } | Sort-Object { [version]($_.Name.Substring(8)) })
+          if ($overlays.Count -eq 0) { throw "No versioned cseq release overlays found" }
+          foreach ($overlay in $overlays) {
+            Write-Output ("Applying compatibility source overlay: " + $overlay.Name)
+            Copy-Item -Path (Join-Path $overlay.FullName '*') -Destination source -Recurse -Force
+          }
 
       - uses: actions/setup-python@v7
         with:
@@ -141,6 +149,8 @@ jobs:
         working-directory: source
         run: |
           python --version
+          python ../release/verify_python_compatibility.py .
+          if ($LASTEXITCODE -ne 0) { throw "Python compatibility policy guard failed" }
           python -m pip install --upgrade pip
           python -m pip install "pytest<9"
           python -m pip install ".[parser-tree-sitter]"
