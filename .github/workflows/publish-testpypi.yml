@@ -2,9 +2,6 @@ name: Publish cseq to TestPyPI
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'release/trigger-testpypi'
 
 permissions:
   contents: read
