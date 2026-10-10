@@ -1,0 +1,73 @@
+name: Python 3.8 legacy Language API probe
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - '.github/workflows/python38-language-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.8"
+          check-latest: true
+      - shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: "tree-sitter==0.21.3" "tree-sitter-c==0.21.4"
+          @'
+          import tree_sitter, tree_sitter_c
+          from importlib import metadata
+
+          raw = tree_sitter_c.language()
+          print("runtime", metadata.version("tree-sitter"))
+          print("grammar", metadata.version("tree-sitter-c"))
+          print("raw_type", type(raw).__name__)
+          print("raw_repr", repr(raw))
+
+          language = None
+          errors = []
+          for args in ((raw,), (raw, "c")):
+              try:
+                  language = tree_sitter.Language(*args)
+                  print("LANGUAGE_OK", len(args), language)
+                  break
+              except Exception as exc:
+                  errors.append((len(args), type(exc).__name__, str(exc)))
+                  print("LANGUAGE_FAIL", len(args), type(exc).__name__, str(exc))
+          if language is None:
+              raise RuntimeError(errors)
+
+          print("version", getattr(language, "version", None))
+          print("abi_version", getattr(language, "abi_version", None))
+
+          try:
+              parser = tree_sitter.Parser(language)
+              print("PARSER_CTOR_LANGUAGE_OK")
+          except Exception as exc:
+              print("PARSER_CTOR_LANGUAGE_FAIL", type(exc).__name__, str(exc))
+              parser = tree_sitter.Parser()
+              if hasattr(parser, "set_language"):
+                  parser.set_language(language)
+                  print("PARSER_SET_LANGUAGE_OK")
+              else:
+                  parser.language = language
+                  print("PARSER_PROPERTY_LANGUAGE_OK")
+
+          tree = parser.parse(b"int helper(void){return 1;} int main(void){return helper();}")
+          print("root", tree.root_node.type)
+
+          q = language.query("(function_definition) @fn")
+          print("query_type", type(q).__name__)
+          print("captures", q.captures(tree.root_node))
+          print("matches", q.matches(tree.root_node))
+          print("LEGACY_API_PROBE_OK")
+          '@ | python -
