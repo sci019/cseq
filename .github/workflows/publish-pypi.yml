@@ -6,6 +6,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 jobs:
   publish-pypi:
@@ -16,6 +17,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Require successful full Python compatibility CI on this exact commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/python-compat.yml/runs" -f head_sha="$GITHUB_SHA" -f per_page=50 > ci-runs.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          data=json.loads(Path('ci-runs.json').read_text(encoding='utf-8'))
+          sha=os.environ['GITHUB_SHA']
+          matches=[r for r in data.get('workflow_runs',[]) if r.get('head_sha')==sha]
+          if not any(r.get('conclusion')=='success' for r in matches):
+              raise SystemExit('BLOCK_PUBLICATION: full Python 3.8-3.15 and latest stable CI not SUCCESS for '+sha)
+          print('Exact-commit compatibility CI: PASS')
+          PY
+
       - name: Restore validated source and apply compatibility overlays
         shell: bash
         run: |
@@ -23,9 +42,12 @@ jobs:
           echo "4a998011933c8cbe4012e00caa1552c1e964cc6c93185a4711e4afaa3963cf29  cseq_poc.zip" | sha256sum -c -
           mkdir source
           unzip -q cseq_poc.zip -d source
-          cp -a release/overlay-0.0.2/. source/
-          cp -a release/overlay-0.0.3/. source/
-          cp -a release/overlay-0.0.4/. source/
+          mapfile -t overlays < <(find release -mindepth 1 -maxdepth 1 -type d -regex '.*/overlay-[0-9]+\.[0-9]+\.[0-9]+' | sort -V)
+          if [ "${#overlays[@]}" -eq 0 ]; then echo "No release overlays found"; exit 1; fi
+          for overlay in "${overlays[@]}"; do
+            echo "Applying release overlay: $overlay"
+            cp -a "$overlay/." source/
+          done
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,8 +59,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip build
           cd source
+          python ../release/verify_python_compatibility.py .
           python -m build
-          python -m pip install "dist/cseq-0.0.4-py3-none-any.whl[parser-tree-sitter]"
+          wheels=(dist/cseq-*-py3-none-any.whl)
+          if [ "${#wheels[@]}" -ne 1 ]; then echo "Expected one built wheel"; exit 1; fi
+          python -m pip install "${wheels[0]}[parser-tree-sitter]"
           cseq --version
           cseq doctor
           cseq docs all --output-dir ../docs-smoke
