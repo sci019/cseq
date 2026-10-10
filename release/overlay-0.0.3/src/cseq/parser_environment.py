@@ -101,7 +101,7 @@ def _smoke_tree_sitter(expected_abi: int, smoke_source: str, smoke_root: str) ->
         import tree_sitter_c  # type: ignore
 
         language = tree_sitter.Language(tree_sitter_c.language())
-        abi = int(getattr(language, "abi_version"))
+        abi = int(getattr(language, "abi_version", getattr(language, "version", -1)))
         parser = tree_sitter.Parser(language)
         tree = parser.parse(smoke_source.encode("utf-8"))
         root_type = getattr(tree.root_node, "type", None)
