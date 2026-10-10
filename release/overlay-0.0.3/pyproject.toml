@@ -8,7 +8,7 @@ version = "0.0.3"
 description = "C source sequence analysis tool PoC"
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = ["tomli>=2.0.1; python_version < '3.11'"]
+dependencies = ["tomli>=2.0.1; python_version < '3.11'", "importlib-resources==5.13.0; python_version < '3.9'"]
 
 [project.optional-dependencies]
 parser-tree-sitter = [
