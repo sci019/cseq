@@ -1,0 +1,81 @@
+name: cseq Python 3.9 full compatibility
+
+on:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - 'release/apply-0.0.3.py'
+      - '.github/workflows/python39-full.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  python39-full:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore validated cseq 0.0.2 source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ""
+          [IO.File]::WriteAllBytes("cseq_poc.zip", [Convert]::FromBase64String($b64))
+          $actual = (Get-FileHash cseq_poc.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne "4a998011933c8cbe4012e00caa1552c1e964cc6c93185a4711e4afaa3963cf29") {
+            throw "validated source archive checksum mismatch: $actual"
+          }
+          Expand-Archive cseq_poc.zip -DestinationPath source
+          Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
+          python release/apply-0.0.3.py
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+          check-latest: true
+
+      - name: Ensure LLVM/Clang
+        shell: pwsh
+        run: |
+          if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+            choco install llvm --no-progress -y
+          }
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install cseq 0.0.3 with Python 3.9 parser profile
+        shell: pwsh
+        working-directory: source
+        run: |
+          python --version
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[parser-tree-sitter]"
+          python -m pip install "pytest<9"
+          cseq --version
+          cseq doctor
+          python -m pip show tree-sitter tree-sitter-c
+
+      - name: Full regression
+        shell: pwsh
+        working-directory: source
+        run: |
+          python -m pytest -q
+
+      - name: Real C analysis and docs smoke
+        shell: pwsh
+        working-directory: source
+        run: |
+          New-Item -ItemType Directory -Force py39-smoke | Out-Null
+          @'
+          void foo(void) {}
+          int main(void) { foo(); return 0; }
+          '@ | Set-Content -Encoding utf8 py39-smoke/main.c
+          cseq analyze py39-smoke --entry main
+          cseq docs all --output-dir py39-docs
+          if (-not (Test-Path py39-docs/README.md)) { throw "README export missing" }
