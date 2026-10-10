@@ -1,12 +1,12 @@
-name: cseq Python 3.9 full compatibility
+name: Validate cseq 0.0.3 on Python 3.9
 
 on:
   push:
     branches:
       - python-compat-0.0.3
     paths:
-      - 'release/apply-0.0.3.py'
       - '.github/workflows/python39-full.yml'
+      - 'release/overlay-0.0.3/**'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore validated cseq 0.0.2 source
+      - name: Restore validated source with compatibility overlays
         shell: pwsh
         run: |
           $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
@@ -34,7 +34,7 @@ jobs:
           }
           Expand-Archive cseq_poc.zip -DestinationPath source
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
-          python release/apply-0.0.3.py
+          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
         with:
@@ -49,33 +49,42 @@ jobs:
           }
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Install cseq 0.0.3 with Python 3.9 parser profile
-        shell: pwsh
+      - name: Install cseq 0.0.3 and test dependencies
         working-directory: source
+        shell: pwsh
         run: |
           python --version
           python -m pip install --upgrade pip
-          python -m pip install -e ".[parser-tree-sitter]"
+          python -m pip install ".[parser-tree-sitter]"
           python -m pip install "pytest<9"
           cseq --version
           cseq doctor
           python -m pip show tree-sitter tree-sitter-c
 
-      - name: Full regression
-        shell: pwsh
+      - name: Full test suite
         working-directory: source
-        run: |
-          python -m pytest -q
+        shell: pwsh
+        run: python -m pytest -q
 
-      - name: Real C analysis and docs smoke
-        shell: pwsh
+      - name: Analyze real C sample
         working-directory: source
+        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force py39-smoke | Out-Null
+          New-Item -ItemType Directory -Force sample | Out-Null
           @'
           void foo(void) {}
-          int main(void) { foo(); return 0; }
-          '@ | Set-Content -Encoding utf8 py39-smoke/main.c
-          cseq analyze py39-smoke --entry main
-          cseq docs all --output-dir py39-docs
-          if (-not (Test-Path py39-docs/README.md)) { throw "README export missing" }
+          int main(void) {
+              foo();
+              return 0;
+          }
+          '@ | Set-Content -Encoding utf8 sample/main.c
+          cseq analyze sample --entry main
+
+      - name: Export bundled docs
+        working-directory: source
+        shell: pwsh
+        run: |
+          cseq docs all --output-dir docs-smoke
+          if (-not (Test-Path docs-smoke/README.md)) { throw "README export missing" }
+          if (-not (Test-Path docs-smoke/シーケンス解析_設計書.md)) { throw "design export missing" }
+          if (-not (Test-Path docs-smoke/実装・検証成績書.html)) { throw "report export missing" }
