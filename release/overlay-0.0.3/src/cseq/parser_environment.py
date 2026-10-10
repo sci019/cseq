@@ -48,13 +48,36 @@ def load_parser_dependency_lock() -> dict[str, Any]:
 
 def expected_parser_profile(lock: dict[str, Any] | None = None) -> dict[str, object]:
     lock = lock or load_parser_dependency_lock()
+    profiles = lock.get("compatibility_profiles", {})
+    if sys.version_info < (3, 9):
+        legacy = profiles.get("py38")
+        if not legacy:
+            raise RuntimeError("Python 3.8 parser dependency profile is missing")
+        return {
+            "name": "py38-legacy",
+            "tree_sitter_version": str(legacy["tree-sitter"]),
+            "tree_sitter_c_version": str(legacy["tree-sitter-c"]),
+            "grammar_abi": int(legacy["grammar_abi"]),
+            "artifact_lock_source": None,
+        }
     if sys.version_info < (3, 10):
-        legacy = lock.get("compatibility_profiles", {}).get("py39")
+        legacy = profiles.get("py39")
         if not legacy:
             raise RuntimeError("Python 3.9 parser dependency profile is missing")
-        return {"name": "py39-legacy", "tree_sitter_version": str(legacy["tree-sitter"]), "tree_sitter_c_version": str(legacy["tree-sitter-c"]), "grammar_abi": int(legacy["grammar_abi"]), "artifact_lock_source": None}
-    return {"name": "modern", "tree_sitter_version": str(lock["packages"]["tree-sitter"]["version"]), "tree_sitter_c_version": str(lock["packages"]["tree-sitter-c"]["version"]), "grammar_abi": int(lock["packages"]["tree-sitter-c"]["grammar_abi"]), "artifact_lock_source": "packages"}
-
+        return {
+            "name": "py39-legacy",
+            "tree_sitter_version": str(legacy["tree-sitter"]),
+            "tree_sitter_c_version": str(legacy["tree-sitter-c"]),
+            "grammar_abi": int(legacy["grammar_abi"]),
+            "artifact_lock_source": None,
+        }
+    return {
+        "name": "modern",
+        "tree_sitter_version": str(lock["packages"]["tree-sitter"]["version"]),
+        "tree_sitter_c_version": str(lock["packages"]["tree-sitter-c"]["version"]),
+        "grammar_abi": int(lock["packages"]["tree-sitter-c"]["grammar_abi"]),
+        "artifact_lock_source": "packages",
+    }
 
 def _distribution_version(name: str) -> str | None:
     try:
