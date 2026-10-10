@@ -55,7 +55,7 @@ class TreeSitterCParser(ParserBackend):
         language = Language(tree_sitter_c.language())
         lock = load_parser_dependency_lock()
         expected_abi = int(expected_parser_profile(lock)["grammar_abi"])
-        observed_abi = int(getattr(language, "abi_version", -1))
+        observed_abi = int(getattr(language, "abi_version", getattr(language, "version", -1)))
         if observed_abi != expected_abi:
             raise RuntimeError(
                 f"tree-sitter-c ABI mismatch: observed={observed_abi} expected={expected_abi}"
