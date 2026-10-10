@@ -3,7 +3,7 @@ name: Python compatibility
 on:
   push:
     branches:
-      - python-compat-0.0.2
+      - python-compat-0.0.3
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 1"
@@ -26,12 +26,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore validated source and apply 0.0.2 overlay
+      - name: Restore validated source and apply compatibility overlays
         shell: pwsh
         run: |
           $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
@@ -43,6 +43,7 @@ jobs:
           }
           Expand-Archive cseq_poc.zip -DestinationPath source
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
+          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
         if: matrix.python-version != '3.15'
@@ -87,8 +88,13 @@ jobs:
         working-directory: source
         run: |
           python --version
-          python -m pip install --upgrade pip
-          python -m pip install pytest
+          $minor = [int](python -c "import sys; print(sys.version_info.minor)")
+          if ($minor -lt 9) {
+            python -m pip install --upgrade "pip<25.1"
+          } else {
+            python -m pip install --upgrade pip
+          }
+          python -m pip install "pytest<9"
           python -m pip install ".[parser-tree-sitter]"
           cseq --version
           cseq doctor
@@ -101,7 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore validated source and apply 0.0.2 overlay
+      - name: Restore validated source and apply compatibility overlays
         shell: pwsh
         run: |
           $parts = Get-ChildItem release/cseq_poc.zip.b64.part-* | Sort-Object Name
@@ -113,6 +119,7 @@ jobs:
           }
           Expand-Archive cseq_poc.zip -DestinationPath source
           Copy-Item release/overlay-0.0.2/* source/ -Recurse -Force
+          Copy-Item release/overlay-0.0.3/* source/ -Recurse -Force
 
       - uses: actions/setup-python@v7
         with:
@@ -133,7 +140,9 @@ jobs:
         run: |
           python --version
           python -m pip install --upgrade pip
-          python -m pip install pytest
+          python -m pip install "pytest<9"
           python -m pip install ".[parser-tree-sitter]"
+          cseq --version
           cseq doctor
           python -m pytest -q
+          cseq docs all --output-dir ../docs-smoke
