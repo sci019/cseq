@@ -2,6 +2,11 @@ name: Publish cseq to PyPI
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - python-compat-0.0.3
+    paths:
+      - 'release/trigger-pypi-0.0.4'
 
 permissions:
   contents: read
@@ -16,7 +21,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore validated source and apply 0.0.2 overlay
+      - name: Restore validated source and apply compatibility overlays
         shell: bash
         run: |
           cat release/cseq_poc.zip.b64.part-* | base64 --decode > cseq_poc.zip
@@ -24,6 +29,8 @@ jobs:
           mkdir source
           unzip -q cseq_poc.zip -d source
           cp -a release/overlay-0.0.2/. source/
+          cp -a release/overlay-0.0.3/. source/
+          cp -a release/overlay-0.0.4/. source/
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,10 +43,11 @@ jobs:
           python -m pip install --upgrade pip build
           cd source
           python -m build
-          python -m pip install "dist/cseq-0.0.2-py3-none-any.whl[parser-tree-sitter]"
+          python -m pip install "dist/cseq-0.0.4-py3-none-any.whl[parser-tree-sitter]"
           cseq --version
           cseq doctor
           cseq docs all --output-dir ../docs-smoke
+          grep -F "Python 3.8以上" ../docs-smoke/README.md
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
